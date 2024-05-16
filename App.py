@@ -1090,16 +1090,33 @@ class MulticlassModel(nn.Module):
         return superclass_output, class_output, subclass_output
 
 # Function to load the model
-@st.cache(allow_output_mutation=True)
 def load_model():
     model = torch.load('my_model.pt', map_location=torch.device('cpu'))  # Load the model
     model.eval()  # Set the model to evaluation mode
     return model
-
+# Prediction Function
 from rdkit import Chem
 from rdkit.Chem import AllChem
 import numpy as np
-
+import pandas as pd
+# Function to make predictions from Excel file
+def predict_smiles_from_excel(model, file_path, Superclass_mapping, Class_mapping, Subclass_mapping):
+    try:
+        df = pd.read_excel(file_path)
+        if 'SMILES' in df.columns:
+            smiles_list = df['SMILES'].tolist()
+            predictions = []
+            for smiles in smiles_list:
+                predicted_results = predict_smiles(model, smiles, Superclass_mapping, Class_mapping, Subclass_mapping)
+                predictions.append(predicted_results)
+            return predictions, None
+        else:
+            return None, "Error: Column 'SMILES' not found in the Excel file."
+    except FileNotFoundError:
+        return None, f"Error: File not found at the specified path: {file_path}"
+    except Exception as e:
+        return None, f"Error occurred while processing the file: {e}"
+    
 def predict_smiles(model, smiles, Superclass_mapping, Class_mapping, Subclass_mapping):
     # Preprocess SMILES string into Morgan fingerprints
     mol = Chem.MolFromSmiles(smiles)
@@ -1112,6 +1129,7 @@ def predict_smiles(model, smiles, Superclass_mapping, Class_mapping, Subclass_ma
 
     # Convert numpy array to PyTorch tensor
     input_tensor = torch.tensor(arr, dtype=torch.float32)
+
 
     # Make prediction using the model
     with torch.no_grad():
@@ -1132,28 +1150,111 @@ def predict_smiles(model, smiles, Superclass_mapping, Class_mapping, Subclass_ma
 
 # Streamlit app interface
 def main():
-    st.title('Model API')
+     # Set page title and icon
+    st.set_page_config(page_title='Plant Compound Classification', page_icon=':atom_symbol:')
+
+    # Custom CSS for styling
+    st.markdown(
+        """
+        <style>
+        body {
+            background-color: #f0f2f6;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .title {
+            font-size: 32px;
+            color: #333333;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .input-field {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #cccccc;
+            border-radius: 5px;
+            font-size: 16px;
+            color: #333333;
+        }
+        .button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #45a049;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 10px;
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            font-size: 18px;
+            color: #333333;
+            text-align: center;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
     # Load the model
     model = load_model()
 
-    # Input SMILES string
-    input_smiles = input("Enter the SMILES string: ").strip()
+    # App title
+    st.title('Plant Compound Classification')
 
-    # Make predictions
-    if st.button('Predict'):
-        # Convert input data to appropriate format
-        # This depends on the input requirements of your model
-        # For example, you might need to preprocess text, images, etc.
-        # Here, we assume input_data is already preprocessed
-        
-        # Predict superclass, class, and subclass
-        predicted_superclass, predicted_class, predicted_subclass = predict_smiles(model, input_smiles, Superclass_mapping, Class_mapping, Subclass_mapping)
-        # Output predictions
-        print(f"Predicted Superclass: {predicted_superclass}")
-        print(f"Predicted Class: {predicted_class}")
-        print(f"Predicted Subclass: {predicted_subclass}")
+    # User input options
+    option = st.radio('Select input option:', ('Enter SMILES string', 'Upload Excel file'))
 
+    # User input field for SMILES string
+    if option == 'Enter SMILES string':
+        smiles = st.text_input('Enter SMILES string', placeholder='e.g., CCO', max_chars=100)
+        if st.button('Predict', key='predict_button'):
+
+            # Make prediction
+            superclass, classification, subclass = predict_smiles(model, smiles, Superclass_mapping, Class_mapping, Subclass_mapping)
+
+            # Display the prediction
+            st.markdown(f'**Predicted Superclass:** {superclass}')
+            st.markdown(f'**Predicted Class:** {classification}')
+            st.markdown(f'**Predicted Subclass:** {subclass}')
+
+    # File uploader for Excel file
+    elif option == 'Upload Excel file':
+        file = st.file_uploader("Upload Excel file", type=["xlsx"])
+        if file is not None:
+            df = pd.read_excel(file)
+            st.write(df)
+
+            if st.button('Predict', key='predict_excel_button'):
+
+                # Make prediction from Excel file
+                predictions, error = predict_smiles_from_excel(model, file.name, Superclass_mapping, Class_mapping, Subclass_mapping)
+
+                # Display predictions or error message
+                if error:
+                    st.error(error)
+                else:
+                    st.write("Predictions:")
+                    for idx, pred in enumerate(predictions):
+                        st.write(f"Prediction {idx + 1}: Superclass= {pred[0]}, Class= {pred[1]}, Subclass= {pred[2]}")
 
 if __name__ == "__main__":
     main()
+
