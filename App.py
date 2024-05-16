@@ -1,7 +1,7 @@
 import streamlit as st
 import torch
 import torch.nn as nn
-
+from io import StringIO
 ## **Dictionaries**
 
 ### Adding Dictionaries for labels
@@ -1099,24 +1099,9 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 import numpy as np
 import pandas as pd
-# Function to make predictions from Excel file
-def predict_smiles_from_excel(model, file_path, Superclass_mapping, Class_mapping, Subclass_mapping):
-    try:
-        df = pd.read_excel(file_path)
-        if 'SMILES' in df.columns:
-            smiles_list = df['SMILES'].tolist()
-            predictions = []
-            for smiles in smiles_list:
-                predicted_results = predict_smiles(model, smiles, Superclass_mapping, Class_mapping, Subclass_mapping)
-                predictions.append(predicted_results)
-            return predictions, None
-        else:
-            return None, "Error: Column 'SMILES' not found in the Excel file."
-    except FileNotFoundError:
-        return None, f"Error: File not found at the specified path: {file_path}"
-    except Exception as e:
-        return None, f"Error occurred while processing the file: {e}"
-    
+import tempfile
+import os
+   
 def predict_smiles(model, smiles, Superclass_mapping, Class_mapping, Subclass_mapping):
     # Preprocess SMILES string into Morgan fingerprints
     mol = Chem.MolFromSmiles(smiles)
@@ -1129,7 +1114,6 @@ def predict_smiles(model, smiles, Superclass_mapping, Class_mapping, Subclass_ma
 
     # Convert numpy array to PyTorch tensor
     input_tensor = torch.tensor(arr, dtype=torch.float32)
-
 
     # Make prediction using the model
     with torch.no_grad():
@@ -1145,7 +1129,6 @@ def predict_smiles(model, smiles, Superclass_mapping, Class_mapping, Subclass_ma
     decoded_subclass = Subclass_mapping.get(predicted_subclass, 'Unknown Subclass')
 
     return decoded_superclass, decoded_class, decoded_subclass
-
 
 
 # Streamlit app interface
@@ -1235,26 +1218,6 @@ def main():
             st.markdown(f'**Predicted Class:** {classification}')
             st.markdown(f'**Predicted Subclass:** {subclass}')
 
-    # File uploader for Excel file
-    elif option == 'Upload Excel file':
-        file = st.file_uploader("Upload Excel file", type=["xlsx"])
-        if file is not None:
-            df = pd.read_excel(file)
-            st.write(df)
-
-            if st.button('Predict', key='predict_excel_button'):
-
-                # Make prediction from Excel file
-                predictions, error = predict_smiles_from_excel(model, file.name, Superclass_mapping, Class_mapping, Subclass_mapping)
-
-                # Display predictions or error message
-                if error:
-                    st.error(error)
-                else:
-                    st.write("Predictions:")
-                    for idx, pred in enumerate(predictions):
-                        st.write(f"Prediction {idx + 1}: Superclass= {pred[0]}, Class= {pred[1]}, Subclass= {pred[2]}")
 
 if __name__ == "__main__":
     main()
-
